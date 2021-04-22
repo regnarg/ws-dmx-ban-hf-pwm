@@ -68,6 +68,16 @@ over the UART that you used for programming.
 When satisfied, you can disconnect the programming UART, put back the RS485
 receiver chip and you should be able to send the same commands over RS485.
 
+## Technical details
+
+### CPU pinout & connections
+
+For the 3-channel version:
+![CPU pinout and connections for the 3-channel version](doc/cpu-pinout.png)
+
+R,G,B go directly to the LED driving transistors. A0..A8 and FUN go to the
+DIP switches.
+
 
 ## Related projects and links
 
