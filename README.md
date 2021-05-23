@@ -28,9 +28,14 @@ reliable 32 kHz PWM output with 64 brightness steps:
     devices on the same RS485 bus. Implementing DMX should be also feasible.
     Currently there is a trivial protocol that allows you to set uniform brightness
     on all channels by sending a digit 0 to 9 over the serial line (9600 8N1).
-  * Currently it was tested on a 3-channel `WS-DMX-3CH BAN-V2` with a STC11L04E
-    CPU. It seems that the 4 channel version uses the same CPU but I don't know
-    which GPIO pin controls the last channel.
+
+## Supported devices
+
+Currently tested on:
+
+
+  * `WS-DMX-3CH BAN-V2` (STC11L04E)
+  * `WS-DMX-4CH BAN-V3` (STC11L04E)
 
 ## Build and install
 
@@ -67,6 +72,10 @@ over the UART that you used for programming.
 
 When satisfied, you can disconnect the programming UART, put back the RS485
 receiver chip and you should be able to send the same commands over RS485.
+
+## Simple protocol
+
+
 
 ## Technical details
 

@@ -13,7 +13,7 @@
 #define AUXR_T1x12 (1<<6)
 #define AUXR_S1BRS (1<<0)
 
-uint8_t level1=32, level2=32, level3=32;
+uint8_t level0=32, level1=32, level2=32, level3=32;
 uint8_t addr;
 
 #define LEVELS 64
@@ -43,6 +43,8 @@ static  inline void update() {
 	add	a,#_pwm
 	mov	r1,a
 	mov	a,@r1
+    rrc a
+	mov	_P3_6,c
     rrc a
 	mov	_P3_2,c
     rrc a
@@ -79,10 +81,32 @@ void timer_init() {
     //AUXR |=  AUXR_T1x12;
 }
 
+void dip_init() {
+    P3_5 = 1; // enable pull-ups
+    P3_7 = 1;
+    P1_0 = 1;
+    P1_1 = 1;
+    P1_2 = 1;
+    P1_3 = 1;   
+    P1_4 = 1;
+    P1_5 = 1;
+    // give some time to settle
+    __asm
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+    __endasm;
+}
+
 uint8_t read_addr()
 {
     //initialize unused bits as 1 (will later be inverted to 0)
     uint8_t result = 0x00;
+
+
 
     result = result | P3_5;
     result = result | (P3_7 << 1);
@@ -93,8 +117,9 @@ uint8_t read_addr()
     result = result | (P1_4 << 6);
     result = result | (P1_5 << 7);
 
-    result = ~result;
-    return result;
+    result = ~result; // DIP switches are active low
+
+    return result & 0b01111111; // we use only 7bit addresses
 }
 
 void recompute() {
@@ -105,6 +130,8 @@ void recompute() {
         val |= (i < level2);
         val = RL(val, 1);
         val |= (i < level1);
+        val = RL(val, 1);
+        val |= (i < level0);
         pwm[i] = val;
         //UPDATE(); //do not forget to update output during recomputation
     }
@@ -113,12 +140,17 @@ void recompute() {
 
 void main()
 {
-    P3M0 = 0x1C; //set P3.4, P3.3 and P3.2 to strong push pull output
+    P3M0 = 0b1011100; //set P3.6, P3.4, P3.3 and P3.2 to strong push pull output
     EA  =  0; //disable interrupts
+    dip_init();
     addr = read_addr();
     recompute();
     uart_init();
     timer_init();
+
+    uint8_t last = 0b11111111;
+    uint8_t am_active = 0;
+    uint8_t cur_channel = 100;
 
     while (1) {
         //P3 = (1<<4) | (1<<3) | (1<<2);
@@ -143,16 +175,53 @@ void main()
         if (RI==1) {
             RI=0;
             uint8_t tmp = SBUF;
-            TI=0;
-            SBUF=tmp;
-            if (tmp >= '0' && tmp <= '9') {
-                uint8_t lev  = (uint8_t) (((uint16_t)LEVELS  * (uint16_t)(tmp - '0')) / 10);
-                level1 = lev;
-                level2 = lev;
-                level3 = lev;
-                recompute();
-                update();
+            //update();
+            if (tmp == last) { // trivial error correction - must send same byte twice
+                //TI=0;
+                //SBUF=tmp;
+                //update();
+                if (tmp < 128) {
+                    am_active = (addr == tmp);
+                    //update();
+                } else if (tmp < 128 + 32) {
+                    cur_channel = tmp - 128;
+                    //update();
+                } else if (tmp <= 128 + 32 + 64) {
+                    if (am_active) {
+                        uint8_t val = tmp - (128+32);
+                        switch (cur_channel) {
+                            case 0:
+                                level0 = val;
+                                break;
+                            case 1:
+                                level1 = val;
+                                break;
+                            case 2:
+                                level2 = val;
+                                break;
+                            case 3:
+                                level3 = val;
+                                break;
+                            case 31: // set all
+                                level0 = val;
+                                level1 = val;
+                                level2 = val;
+                                level3 = val;
+                                break;
+                        }
+                        //update();
+                        recompute();
+                        //update();
+                    }
+                } else if (tmp == 250) { // query address
+                    TI = 0;
+                    addr = read_addr();
+                    SBUF = addr;
+                } else if (tmp == 251) { // broadcast
+                    am_active = 1;
+                }
             }
+            last = tmp;
         }
 
     }
