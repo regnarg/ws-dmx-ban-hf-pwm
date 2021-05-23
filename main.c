@@ -66,6 +66,8 @@ void uart_init()
     BRT = 178;
     AUXR =  AUXR_BRTR | AUXR_BRTx12 | AUXR_S1BRS;
 
+    PCON |= (1 << 6);
+
     //TH1 = 178;
     //TMOD = 0b00100000;
     //TR1 = 1;
@@ -176,7 +178,13 @@ void main()
             RI=0;
             uint8_t tmp = SBUF;
             update();
-            //if (tmp == last) { // trivial error correction - must send same byte twice
+            if (SM0) { // framing error
+                TI=0;
+                SBUF = 222;
+                SM0 = 0;
+                continue;
+            }
+            if (tmp == last) { // trivial error correction - must send same byte twice
                 TI=0;
                 SBUF=tmp;
                 update();
@@ -229,8 +237,8 @@ void main()
                 } else if (tmp == 251) { // broadcast
                     am_active = 1;
                 }
-            //}
-            //last = tmp;
+            }
+            last = tmp;
         }
 
         update();
