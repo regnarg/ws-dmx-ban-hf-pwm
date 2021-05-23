@@ -13,7 +13,7 @@
 #define AUXR_T1x12 (1<<6)
 #define AUXR_S1BRS (1<<0)
 
-uint8_t level0=32, level1=32, level2=32, level3=32;
+uint8_t level0=5, level1=5, level2=5, level3=5;
 uint8_t addr;
 
 #define LEVELS 64
@@ -127,12 +127,16 @@ void recompute() {
         uint8_t val = 0;
         val |= (i < level3);
         val = RL(val, 1);
+        update();
         val |= (i < level2);
         val = RL(val, 1);
+        update();
         val |= (i < level1);
         val = RL(val, 1);
+        update();
         val |= (i < level0);
         pwm[i] = val;
+        update();
         //UPDATE(); //do not forget to update output during recomputation
     }
 }
@@ -148,6 +152,10 @@ void main()
     uart_init();
     timer_init();
 
+    TI = 0;
+    SBUF = 'R';
+    while (TI);
+
     uint8_t last = 0b11111111;
     uint8_t am_active = 0;
     uint8_t cur_channel = 100;
@@ -162,56 +170,57 @@ void main()
         update();
         update();
         update();
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
 
 
         if (RI==1) {
             RI=0;
             uint8_t tmp = SBUF;
-            //update();
-            if (tmp == last) { // trivial error correction - must send same byte twice
-                //TI=0;
-                //SBUF=tmp;
-                //update();
+            update();
+            //if (tmp == last) { // trivial error correction - must send same byte twice
+                TI=0;
+                SBUF=tmp;
+                update();
                 if (tmp < 128) {
+                    update();
                     am_active = (addr == tmp);
-                    //update();
+                    update();
                 } else if (tmp < 128 + 32) {
+                    update();
                     cur_channel = tmp - 128;
-                    //update();
+                    update();
                 } else if (tmp <= 128 + 32 + 64) {
+                    update();
                     if (am_active) {
+                        update();
                         uint8_t val = tmp - (128+32);
                         switch (cur_channel) {
                             case 0:
+                                update();
                                 level0 = val;
                                 break;
                             case 1:
+                                update();
                                 level1 = val;
                                 break;
                             case 2:
+                                update();
                                 level2 = val;
                                 break;
                             case 3:
+                                update();
                                 level3 = val;
                                 break;
                             case 31: // set all
+                                update();
                                 level0 = val;
                                 level1 = val;
                                 level2 = val;
                                 level3 = val;
                                 break;
                         }
-                        //update();
+                        update();
                         recompute();
-                        //update();
+                        update();
                     }
                 } else if (tmp == 250) { // query address
                     TI = 0;
@@ -220,9 +229,18 @@ void main()
                 } else if (tmp == 251) { // broadcast
                     am_active = 1;
                 }
-            }
-            last = tmp;
+            //}
+            //last = tmp;
         }
+
+        update();
+        update();
+        update();
+        update();
+        update();
+        update();
+        update();
+        update();
 
     }
 }

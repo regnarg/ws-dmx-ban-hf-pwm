@@ -4,13 +4,16 @@ import sys
 import time
 import serial
 
-ser = serial.Serial('/dev/ttyUSB0', 9600)
+ser = serial.Serial(sys.argv[1], 9600)
 
 def send_byte(b):
+    print("send",b)
     assert 0 <= b <= 256
     for i in range(3):
-        ser.write(bytes([b])) # repeat for redundancy
-        time.sleep(0.05)
+        for i in range(3):
+            ser.write(bytes([b])) # repeat for redundancy
+            time.sleep(0.001)
+        time.sleep(0.005)
 
 def send_addr(a):
     assert 0 <= a < 128
@@ -25,6 +28,8 @@ def send_val(v):
     send_byte(v + 128 + 32)
 
 if __name__ == '__main__':
-    send_addr(int(sys.argv[1]))
-    send_chan(int(sys.argv[2]))
-    send_val(int(sys.argv[3]))
+    send_addr(int(sys.argv[2]))
+    time.sleep(1)
+    send_chan(int(sys.argv[3]))
+    time.sleep(1)
+    send_val(int(sys.argv[4]))
