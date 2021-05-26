@@ -54,20 +54,23 @@ static  inline void update() {
     __endasm;
 }
 
+
+
+
+#define PCON_SMOD0 (1 << 6)
 void uart_init()
 {
-    //SCON = 0xD8;
-    //SCON = 0x48; // 8-bit uart
-    SCON = 0xD8; // 8-bit uart
+    SM0 = 0; // 8-bit mode
+    SM1 = 1; // variable-rate UART
 
     //calculate timer overlow values based to achieve BAUD rate based on cpu frequency 
     //copied from the example code in offcial documentation
     
-    BRT = 226;
-    //BRT = 178;
+    //BRT = 226;
+    BRT = 178;
     AUXR =  AUXR_BRTR | AUXR_BRTx12 | AUXR_S1BRS;
 
-    PCON |= (1 << 6);
+    PCON |= PCON_SMOD0; // enable frame error bit access
 
     //TH1 = 178;
     //TMOD = 0b00100000;
@@ -75,6 +78,7 @@ void uart_init()
     //AUXR =  AUXR_T1x12;
 
 
+    REN = 1;
 }
 
 void timer_init() {

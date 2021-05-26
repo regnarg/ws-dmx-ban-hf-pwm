@@ -15,4 +15,4 @@ def send_byte(b):
     time.sleep(0.003)
 
 if __name__ == '__main__':
-    send_byte(int(sys.argv[2]))
+    send_byte(eval(sys.argv[2]))

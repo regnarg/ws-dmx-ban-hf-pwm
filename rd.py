@@ -4,7 +4,7 @@ import sys
 import time
 import serial
 
-ser = serial.Serial(sys.argv[1], 25000)
+ser = serial.Serial(sys.argv[1], 9600)
 last = 0
 
 while True:
