@@ -11,6 +11,7 @@ __sfr __at (0xb2) P3M0;
 __sfr __at (0xb1) P3M1;
 
 __sfr __at (0x8e) AUXR;
+__sfr __at (0x8f) WAKE_CLKO;
 // __sfr __at (0xd6) T2H;
 // __sfr __at (0xd7) T2L;
 

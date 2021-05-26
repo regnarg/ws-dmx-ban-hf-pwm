@@ -64,6 +64,7 @@ void uart_init()
     //copied from the example code in offcial documentation
     
     BRT = 226;
+    //BRT = 178;
     AUXR =  AUXR_BRTR | AUXR_BRTx12 | AUXR_S1BRS;
 
     PCON |= (1 << 6);
@@ -146,114 +147,45 @@ void recompute() {
 
 void main()
 {
-    P3M0 = 0b1011100; //set P3.6, P3.4, P3.3 and P3.2 to strong push pull output
+    //P3M0 = 0b1011100; //set P3.6, P3.4, P3.3 and P3.2 to strong push pull output
     EA  =  0; //disable interrupts
-    dip_init();
-    addr = read_addr();
-    recompute();
     uart_init();
-    timer_init();
+
+    WAKE_CLKO |= 4; //BRTCLKO - baudrate generator clock output on P1.0
 
     TI = 0;
     SBUF = 'R';
     while (TI);
 
     uint8_t last = 0b11111111;
-    uint8_t am_active = 0;
-    uint8_t cur_channel = 100;
+    uint8_t cur = 0;
 
     while (1) {
         //P3 = (1<<4) | (1<<3) | (1<<2);
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
-
-
+        // TI = 0;
+        // SBUF = 8; //cur++;
+        // while(!TI) ;
+        // for (int i = 0; i < 10000; i++) {
+        //     __asm
+        //         nop;
+        //     __endasm;
+        // }
         if (RI==1) {
             RI=0;
             uint8_t tmp = SBUF;
-            update();
             if (SM0) { // framing error
                 TI=0;
                 SBUF = 222;
                 SM0 = 0;
                 continue;
             }
-            if (tmp == last) { // trivial error correction - must send same byte twice
+            //if (tmp == last) { // trivial error correction - must send same byte twice
                 TI=0;
                 SBUF=tmp;
                 //SBUF=(tmp < 128);
-                //update();
-                if (!(tmp & 128)) { // tmp < 128
-                    //update();
-                    //TI=0;
-                    //SBUF=35;
-                    am_active = (addr == tmp);
-                    //update();
-                } else if (tmp < 128 + 32) {
-                    update();
-                    cur_channel = tmp - 128;
-                    update();
-                } else if (tmp <= 128 + 32 + 64) {
-                    update();
-                    if (am_active) {
-                        update();
-                        uint8_t val = tmp - (128+32);
-                        switch (cur_channel) {
-                            case 0:
-                                update();
-                                level0 = val;
-                                break;
-                            case 1:
-                                update();
-                                level1 = val;
-                                break;
-                            case 2:
-                                update();
-                                level2 = val;
-                                break;
-                            case 3:
-                                update();
-                                level3 = val;
-                                break;
-                            case 31: // set all
-                                update();
-                                level0 = val;
-                                level1 = val;
-                                level2 = val;
-                                level3 = val;
-                                break;
-                        }
-                        update();
-                        recompute();
-                        update();
-                    }
-                } else if (tmp == 250) { // query address
-                    TI = 0;
-                    addr = read_addr();
-                    SBUF = addr;
-                } else if (tmp == 251) { // broadcast
-                    TI=0;
-                    SBUF=251;
-                    am_active = 1;
-                }
-            }
+            //}
             last = tmp;
         }
-
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
-
     }
 }
+
