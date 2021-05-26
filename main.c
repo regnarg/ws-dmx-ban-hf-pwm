@@ -153,7 +153,7 @@ void main()
 
     uint8_t last = 0b11111111;
     uint8_t am_active = 0;
-    uint8_t cur_channel = 100;
+    uint8_t cur_channel = 0;
 
     while (1) {
         //P3 = (1<<4) | (1<<3) | (1<<2);
@@ -175,65 +175,51 @@ void main()
                 TI=0;
                 SBUF = 222;
                 SM0 = 0;
+                am_active = 0;
+                cur_channel = 0;
+                update();
                 continue;
             }
             if (tmp == last) { // trivial error correction - must send same byte twice
-                TI=0;
-                SBUF=tmp;
-                //SBUF=(tmp < 128);
-                //update();
+                //TI=0;
+                //SBUF=tmp;
+                update();
                 if (!(tmp & 128)) { // tmp < 128
-                    //update();
-                    //TI=0;
-                    //SBUF=35;
+                    update();
                     am_active = (addr == tmp);
-                    //update();
-                } else if (tmp < 128 + 32) {
                     update();
-                    cur_channel = tmp - 128;
-                    update();
-                } else if (tmp <= 128 + 32 + 64) {
-                    update();
-                    if (am_active) {
-                        update();
-                        uint8_t val = tmp - (128+32);
-                        switch (cur_channel) {
-                            case 0:
-                                update();
-                                level0 = val;
-                                break;
-                            case 1:
-                                update();
-                                level1 = val;
-                                break;
-                            case 2:
-                                update();
-                                level2 = val;
-                                break;
-                            case 3:
-                                update();
-                                level3 = val;
-                                break;
-                            case 31: // set all
-                                update();
-                                level0 = val;
-                                level1 = val;
-                                level2 = val;
-                                level3 = val;
-                                break;
-                        }
-                        update();
-                        recompute();
-                        update();
-                    }
+                } else if (tmp == 251) { // broadcast
+                    am_active = 1;
                 } else if (tmp == 250) { // query address
                     TI = 0;
                     addr = read_addr();
                     SBUF = addr;
-                } else if (tmp == 251) { // broadcast
-                    TI=0;
-                    SBUF=251;
-                    am_active = 1;
+                } else if (am_active) {
+                    if (tmp < 128 + 32) {
+                        update();
+                        cur_channel = tmp - 128;
+                        update();
+                    } else if (tmp <= 128 + 32 + 64) {
+                        update();
+                        if (am_active) {
+                            update();
+                            uint8_t val = tmp - (128+32);
+                            if (cur_channel & 1)
+                                level0 = val;
+                            if (cur_channel & 2)
+                                level1 = val;
+                            update();
+                            if (cur_channel & 4)
+                                level2 = val;
+                            if (cur_channel & 8)
+                                level3 = val;
+                            update();
+                        }
+                    } else if (tmp == 252) { // commit / recompute
+                        recompute();
+                        am_active = 0;
+                        cur_channel = 0;
+                    }
                 }
             }
             last = tmp;
