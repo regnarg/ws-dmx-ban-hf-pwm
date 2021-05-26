@@ -63,7 +63,7 @@ void uart_init()
     //calculate timer overlow values based to achieve BAUD rate based on cpu frequency 
     //copied from the example code in offcial documentation
     
-    BRT = 178;
+    BRT = 226;
     AUXR =  AUXR_BRTR | AUXR_BRTx12 | AUXR_S1BRS;
 
     PCON |= (1 << 6);
