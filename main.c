@@ -118,7 +118,7 @@ uint8_t read_addr()
 }
 
 void recompute() {
-    for (int i = 0; i < LEVELS; i++) {
+    for (uint8_t i = 0; i < LEVELS; i++) {
         uint8_t val = 0;
         val |= (i < level3);
         val = RL(val, 1);
@@ -136,6 +136,7 @@ void recompute() {
     }
 }
 
+#define MSG_LEN 6 //address, 4 channel values, 1B padding
 
 void main()
 {
@@ -152,8 +153,10 @@ void main()
     while (TI);
 
     uint8_t last = 0b11111111;
-    uint8_t am_active = 0;
-    uint8_t cur_channel = 0;
+    uint8_t msg[MSG_LEN];
+    uint8_t msgidx = 255;
+    uint8_t csum = 0;
+    uint8_t last_csum = 255;
 
     while (1) {
         //P3 = (1<<4) | (1<<3) | (1<<2);
@@ -171,58 +174,58 @@ void main()
             RI=0;
             uint8_t tmp = SBUF;
             update();
+
             if (SM0) { // framing error
                 TI=0;
                 SBUF = 222;
                 SM0 = 0;
-                am_active = 0;
-                cur_channel = 0;
-                update();
-                continue;
+                msgidx = 255;
             }
-            if (tmp == last) { // trivial error correction - must send same byte twice
-                //TI=0;
-                //SBUF=tmp;
+
+
+
+            if (tmp == 253) { // start of message
+                msgidx = 0;
+                csum = 0;
                 update();
-                if (!(tmp & 128)) { // tmp < 128
+            } else if (tmp == 250) {
+                addr = read_addr();
+                TI = 0;
+                SBUF = addr;
+            } else if (msgidx == MSG_LEN) {
+                update();
+                if (tmp == csum && csum != last_csum) { // valid message
+                    level0  = msg[1];
+                    level1  = msg[2];
                     update();
-                    am_active = (addr == tmp);
+                    level2  = msg[3];
+                    level3  = msg[4];
                     update();
-                } else if (tmp == 251) { // broadcast
-                    am_active = 1;
-                } else if (tmp == 250) { // query address
-                    TI = 0;
-                    addr = read_addr();
-                    SBUF = addr;
-                } else if (am_active) {
-                    if (tmp < 128 + 32) {
-                        update();
-                        cur_channel = tmp - 128;
-                        update();
-                    } else if (tmp <= 128 + 32 + 64) {
-                        update();
-                        if (am_active) {
-                            update();
-                            uint8_t val = tmp - (128+32);
-                            if (cur_channel & 1)
-                                level0 = val;
-                            if (cur_channel & 2)
-                                level1 = val;
-                            update();
-                            if (cur_channel & 4)
-                                level2 = val;
-                            if (cur_channel & 8)
-                                level3 = val;
-                            update();
-                        }
-                    } else if (tmp == 252) { // commit / recompute
-                        recompute();
-                        am_active = 0;
-                        cur_channel = 0;
-                    }
+                    recompute();
+                    update();
+                    last_csum = csum;
                 }
+                update();
+                msgidx = 255;
+            } else if (msgidx != 255) {
+                update();
+                if (msgidx == 0 && tmp != addr && tmp != 251) {
+                    msgidx = 255;
+                    update();
+                    continue;
+                }
+                if (msgidx > 0 && tmp > 64) {
+                    msgidx = 255;
+                    update();
+                    continue;
+                }
+                msg[msgidx] = tmp;
+                update();
+                csum = RL(csum, 3);
+                csum ^= tmp;
+                msgidx++;
+                update();
             }
-            last = tmp;
         }
 
         update();

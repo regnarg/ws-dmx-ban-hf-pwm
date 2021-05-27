@@ -3,39 +3,46 @@
 import sys
 import time
 import serial
+import random
 
 ser = serial.Serial(sys.argv[1], 9600)
 
-def send_byte(b):
-    print("send",b)
-    assert 0 <= b <= 256
-    for i in range(6):
-        ser.write(bytes([b])) # repeat for redundancy
-        time.sleep(0.003)
-    #time.sleep(0.005)
+def RL(a,k):
+    return (((a) << (k)) | ((a) >> (8-(k)))) & 0xFF
 
-def send_addr(a):
-    assert 0 <= a < 128 or a==251
-    send_byte(a)
+def send_bytes(bs):
+    print("send", list(bs))
+    #for i in range(50):
+    #    ser.write(bytes(bs))
+    #    time.sleep(0.001)
+    for b in bs:
+        ser.write(bytes([b]))
+        time.sleep(0.005)
 
-def send_chan(c):
-    assert 0 <= c < 32
-    send_byte(c + 128)
+def compute_csum(msg):
+    csum = 0
+    for b in msg:
+        csum = RL(csum, 3)
+        csum ^= b
+    return csum
 
-def send_val(v):
-    assert 0 <= v <= 64 # 0 to 64 inclusive!
-    send_byte(v + 128 + 32)
+def wrap_msg(msg):
+    msg = bytes(list(msg) + [random.randrange(256)])
+    assert len(msg) == 6
+    return bytes([253]) + bytes(msg) + bytes([compute_csum(msg)])
+
+def send_msg(msg):
+    send_bytes(wrap_msg(msg))
 
 if __name__ == '__main__':
-    send_addr(int(sys.argv[2]))
+    addr = int(sys.argv[2])
+    vals = [0, 0, 0, 0]
     for arg in sys.argv[3:]:
         if ':' in arg:
             chans, val = arg.split(':')
             val = int(val)
-            mask = sum( 1 << int(chan) for chan in chans.split(',') )
+            for chan in map(int, chans.split(',')):
+                vals[chan] = val
         else:
-            mask = 31
-            val = int(arg)
-        send_chan(mask)
-        send_val(val)
-    send_byte(252)
+            vals = [int(arg)]*4
+    send_msg([addr] + vals)
