@@ -17,7 +17,9 @@ def send_bytes(bs):
     #    time.sleep(0.001)
     for b in bs:
         ser.write(bytes([b]))
-        time.sleep(0.005)
+        ser.flush()
+        time.sleep(0.05)
+    ser.flush()
 
 def compute_csum(msg):
     csum = 0
