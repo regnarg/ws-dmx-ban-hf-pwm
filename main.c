@@ -28,7 +28,7 @@ uint8_t msgidx = 255;
 uint8_t csum = 0;
 uint8_t last_csum = 255;
 
-uint8_t need_recompute = 0;
+uint8_t need_recompute = 0, recompute_running = 0;
 
 
 #define STEP (TL1 & (LEVELS-1))
@@ -137,18 +137,20 @@ uint8_t recompute_iter = 0 ;
 
 
 static inline void recompute_step() {
-    uint8_t i = recompute_iter & 63;
     uint8_t val = 0;
-    val |= (i < level3);
+    val |= (recompute_iter < level3);
     val = RL(val, 1);
-    val |= (i < level2);
+    val |= (recompute_iter < level2);
     val = RL(val, 1);
-    val |= (i < level1);
+    val |= (recompute_iter < level1);
     val = RL(val, 1);
-    val |= (i < level0);
-    pwm[i] = val;
+    val |= (recompute_iter < level0);
+    pwm[recompute_iter] = val;
     update();
     recompute_iter++;
+    if (recompute_iter == 64) {
+        recompute_iter = 0;
+    }
 }
 
 static inline void send_sync(uint8_t what) {
@@ -163,78 +165,95 @@ static inline void send_sync(uint8_t what) {
 #endif
 }
 
-static inline void check_uart() {
-    if (RI == 1) {
-            RI=0;
-            uint8_t tmp = SBUF;
-            update();
 
-            if (SM0) { // framing error
-                //TI=0;
-                //SBUF = 222;
-                SM0 = 0;
-                msgidx = 255;
-            }
+void handle_uart() {
+    RI=0;
+    uint8_t tmp = SBUF;
+    update();
 
-
-            //TI=0;
-            //SBUF=tmp;
-            //send_sync(msgidx); //XXX
-            //send_sync(tmp); //XXX
-
-            if (tmp == 253) { // start of message
-                msgidx = 0;
-                csum = 0;
-                update();
-            } else if (tmp == 250) {
-                addr = read_addr();
-                //TI = 0;
-                //SBUF = addr;
-            } else if (msgidx == MSG_LEN) {
-                //send_sync(221);
-                update();
-                if (tmp == csum && csum != last_csum) { // valid message
-                    level0  = msg[1];
-                    level1  = msg[2];
-                    update();
-                    level2  = msg[3];
-                    level3  = msg[4];
-                    update();
-                    need_recompute = 1;
-                    last_csum = csum;
-                    //send_sync(222);
-                } else {
-                    //send_sync(226);
-                    //send_sync(csum);
-                    //send_sync(last_csum);
-                    //send_sync(226);
-                }
-                update();
-                msgidx = 255;
-            } else if (msgidx != 255) {
-                update();
-                if (msgidx == 0 && tmp != addr && tmp != 251) {
-                    msgidx = 255;
-                    update();
-                    return;
-                }
-                msg[msgidx] = tmp;
-                update();
-                csum = RL(csum, 3);
-                csum ^= tmp;
-                msgidx++;
-                update();
-            }
-
+    if (SM0) { // framing error
+        //TI=0;
+        //SBUF = 222;
+        SM0 = 0;
+        msgidx = 255;
     }
+
+
+    //TI=0;
+    //SBUF=tmp;
+    //send_sync(msgidx); //XXX
+    //send_sync(tmp); //XXX
+
+    if (tmp == 253) { // start of message
+        msgidx = 0;
+        csum = 0;
+        update();
+    } else if (tmp == 250) {
+        addr = read_addr();
+        //TI = 0;
+        //SBUF = addr;
+    } else if (msgidx == MSG_LEN) {
+        //send_sync(221);
+        update();
+        if (tmp == csum && csum != last_csum) { // valid message
+            level0  = msg[1];
+            level1  = msg[2];
+            update();
+            level2  = msg[3];
+            level3  = msg[4];
+            update();
+            need_recompute = 1;
+            last_csum = csum;
+            //send_sync(222);
+        } else {
+            //send_sync(226);
+            //send_sync(csum);
+            //send_sync(last_csum);
+            //send_sync(226);
+        }
+        update();
+        msgidx = 255;
+    } else if (msgidx != 255) {
+        update();
+        if (msgidx == 0 && tmp != addr && tmp != 251) {
+            msgidx = 255;
+            update();
+            return;
+        }
+        msg[msgidx] = tmp;
+        update();
+        csum = RL(csum, 3);
+        csum ^= tmp;
+        msgidx++;
+        update();
+    }
+}
+
+static inline void check_uart() {
+#if ! RX_INTERRUPT
+    if (RI == 1) {
+        handle_uart();
+    }
+#endif
 }
 
 #if RX_INTERRUPT
 void  UART_Interrupt_Receive (void) __interrupt(SI0_VECTOR) __using(1)
 {
-    check_uart();
+    if (RI == 1) {
+        handle_uart();
+    }
 }
 #endif
+
+static inline void ucu() {
+    update();
+    update();
+    update();
+    update();
+    check_uart();
+}
+
 
 void main()
 {
@@ -258,33 +277,31 @@ void main()
 
 
     while (1) {
-        //P3 = (1<<4) | (1<<3) | (1<<2);
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
-        update();
+        ucu();
+        ucu();
+        ucu();
+        ucu();
 
+        if (need_recompute) {
+            need_recompute = 0;
+            recompute_running = 1;
+            recompute_iter = 0;
+        }
 
-#if !RX_INTERRUPT
-        check_uart();
-#endif
+        ucu();
+        ucu();
+        ucu();
+        ucu();
 
-        update();
-        update();
-        update();
-        update();
+        if (recompute_running) {
+            ucu();
+            recompute_step();
+            ucu();
+        }
 
-        recompute_step();
-
-        update();
-        update();
-        update();
-        update();
-
-
+        ucu();
+        ucu();
+        ucu();
+        ucu();
     }
 }
