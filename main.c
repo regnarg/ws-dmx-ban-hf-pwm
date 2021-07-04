@@ -18,7 +18,6 @@ uint8_t level0=5, level1=5, level2=5, level3=5;
 uint8_t addr;
 
 #define LEVELS 64
-uint8_t pwm[LEVELS];
 
 
 #define MSG_LEN 6 //address, 4 channel values, 1B padding
@@ -36,33 +35,69 @@ uint8_t need_recompute = 0, recompute_running = 0;
 #define RR(a,k) (((a) >> (k)) | ((a) << (8-(k))))  
 #define RL(a,k) (((a) << (k)) | ((a) >> (8-(k))))  
 
-//#define UPDATE()  { uint8_t step = STEP; P3_2 = (step < level1); P3_3 = step < level2; P3_4 = step < level3;}
-//#define UPDATE()  { uint8_t step = STEP; P3_2 = pwm1[step]; P3_3 = pwm2[step]; P3_4 = pwm3[step];}
-//#define UPDATE()  { uint8_t step = TL1; step = (step >> 2); step &= (LEVELS-1); uint8_t val = pwm[step]; P3_2 = val; val >>= 1; P3_3 = val; val >>= 1; P3_4 = val;}
-//#define UPDATE()  { uint8_t step = TL1; step = (step >> 2); step &= (LEVELS-1); P3_2 = (step < level1); P3_3 = step < level2; P3_4 = step < level3;}
 
-#define UPDATE()  { uint8_t step = TL1; step &= (LEVELS-1); uint8_t val = pwm[step]; P3_2 = val; val = RR(val, 1); P3_3 = val; val = RR(val, 1); P3_4 = val;}
+#define ASM_UPDATE_1 \
+        mov     a,_TL1 \
+        anl     a,#0x3f \
+        add     a,#_pwm \
+        mov     r1,a \
+        mov     a,@r1 \
+        rrc a \
+        mov     _P3_6,c \
+        rrc a \
+        mov     _P3_2,c \
+        rrc a \
+        mov     _P3_3,c \
+        rrc a \
+        mov     _P3_4,c \
+        jb _RI, on_uart
 
-//static inline void update() {
-//    uint8_t step = TL1; step = (step >> 2); step &= (LEVELS-1); uint8_t val = pwm[step]; P3_2 = val; val >>= 1; P3_3 = val; val >>= 1; P3_4 = val;
-//}
+// 37 cycles
+#define ASM_UPDATE_2    \
+        mov     a,_TL1    ; 1 \
+        anl     a,#0x3f   ; 3 \
+        mov     r1, a     ; 2 \
+        subb    a,_level0 ; 2 \
+        mov     _P3_6,c   ; 4 \
+        mov     a,r1      ; 1 \
+        subb    a,_level1 ; 2 \
+        mov     _P3_2,c   ; 4 \
+        mov     a,r1      ; 1 \
+        subb    a,_level2 ; 2 \
+        mov     _P3_3,c   ; 4 \
+        mov     a,r1      ; 1 \
+        subb    a,_level3 ; 2 \
+        mov     _P3_4,c   ; 4
 
-static  inline void update() {
-    // POZOR kde jinde se používá r1 !!
+#define ASM_UPDATE_UC \
+        ASM_UPDATE_2 \
+        jb _RI, on_uart   ; 4
+
+#define ASM_UPDATE_UC2 \
+        ASM_UPDATE_2 \
+        jnb _RI, 3   ; 4 \
+        lcall _handle_uart
+
+
+void mainloop() {
+
+
     __asm
-	mov	a,_TL1
-	anl	a,#0x3f
-	add	a,#_pwm
-	mov	r1,a
-	mov	a,@r1
-    rrc a
-	mov	_P3_6,c
-    rrc a
-	mov	_P3_2,c
-    rrc a
-	mov	_P3_3,c
-    rrc a
-	mov	_P3_4,c
+        myloop:
+        ASM_UPDATE_UC
+        ASM_UPDATE_UC
+        ASM_UPDATE_UC
+        ASM_UPDATE_UC
+        SJMP myloop
+
+        on_uart:
+            ASM_UPDATE_2
+            ASM_UPDATE_2
+            lcall _handle_uart
+            ASM_UPDATE_UC
+            ASM_UPDATE_UC
+            LJMP myloop
+
     __endasm;
 }
 
@@ -133,25 +168,7 @@ uint8_t read_addr()
     return result & 0b01111111; // we use only 7bit addresses
 }
 
-uint8_t recompute_iter = 0 ;
 
-
-static inline void recompute_step() {
-    uint8_t val = 0;
-    val |= (recompute_iter < level3);
-    val = RL(val, 1);
-    val |= (recompute_iter < level2);
-    val = RL(val, 1);
-    val |= (recompute_iter < level1);
-    val = RL(val, 1);
-    val |= (recompute_iter < level0);
-    pwm[recompute_iter] = val;
-    update();
-    recompute_iter++;
-    if (recompute_iter == 64) {
-        recompute_iter = 0;
-    }
-}
 
 static inline void send_sync(uint8_t what) {
     ES = 0;  //close serial port interrupt
@@ -169,7 +186,6 @@ static inline void send_sync(uint8_t what) {
 void handle_uart() {
     RI=0;
     uint8_t tmp = SBUF;
-    update();
 
     if (SM0) { // framing error
         //TI=0;
@@ -187,22 +203,17 @@ void handle_uart() {
     if (tmp == 253) { // start of message
         msgidx = 0;
         csum = 0;
-        update();
     } else if (tmp == 250) {
         addr = read_addr();
         //TI = 0;
         //SBUF = addr;
     } else if (msgidx == MSG_LEN) {
         //send_sync(221);
-        update();
         if (tmp == csum && csum != last_csum) { // valid message
             level0  = msg[1];
             level1  = msg[2];
-            update();
             level2  = msg[3];
             level3  = msg[4];
-            update();
-            need_recompute = 1;
             last_csum = csum;
             //send_sync(222);
         } else {
@@ -211,47 +222,17 @@ void handle_uart() {
             //send_sync(last_csum);
             //send_sync(226);
         }
-        update();
         msgidx = 255;
     } else if (msgidx != 255) {
-        update();
         if (msgidx == 0 && tmp != addr && tmp != 251) {
             msgidx = 255;
-            update();
             return;
         }
         msg[msgidx] = tmp;
-        update();
         csum = RL(csum, 3);
         csum ^= tmp;
         msgidx++;
-        update();
     }
-}
-
-static inline void check_uart() {
-#if ! RX_INTERRUPT
-    if (RI == 1) {
-        handle_uart();
-    }
-#endif
-}
-
-#if RX_INTERRUPT
-void  UART_Interrupt_Receive (void) __interrupt(SI0_VECTOR) __using(1)
-{
-    if (RI == 1) {
-        handle_uart();
-    }
-}
-#endif
-
-static inline void ucu() {
-    update();
-    update();
-    update();
-    update();
-    check_uart();
 }
 
 
@@ -275,33 +256,5 @@ void main()
     //SBUF = 'R';
     //while (TI);
 
-
-    while (1) {
-        ucu();
-        ucu();
-        ucu();
-        ucu();
-
-        if (need_recompute) {
-            need_recompute = 0;
-            recompute_running = 1;
-            recompute_iter = 0;
-        }
-
-        ucu();
-        ucu();
-        ucu();
-        ucu();
-
-        if (recompute_running) {
-            ucu();
-            recompute_step();
-            ucu();
-        }
-
-        ucu();
-        ucu();
-        ucu();
-        ucu();
-    }
+    mainloop();
 }
