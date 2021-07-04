@@ -133,29 +133,22 @@ uint8_t read_addr()
     return result & 0b01111111; // we use only 7bit addresses
 }
 
-void recompute() {
-    for (uint8_t i = 0; i < LEVELS; i++) {
-        uint8_t val = 0;
-        val |= (i < level3);
-        val = RL(val, 1);
-        update();
-        val |= (i < level2);
-        val = RL(val, 1);
-        update();
-        val |= (i < level1);
-        val = RL(val, 1);
-        update();
-        val |= (i < level0);
-        pwm[i] = val;
-        update();
-        
-#if !RX_INTERRUPT
-        if (RI) {
-            need_recompute = 1;
-            return;
-        }
-#endif
-    }
+uint8_t recompute_iter = 0 ;
+
+
+static inline void recompute_step() {
+    uint8_t i = recompute_iter & 63;
+    uint8_t val = 0;
+    val |= (i < level3);
+    val = RL(val, 1);
+    val |= (i < level2);
+    val = RL(val, 1);
+    val |= (i < level1);
+    val = RL(val, 1);
+    val |= (i < level0);
+    pwm[i] = val;
+    update();
+    recompute_iter++;
 }
 
 static inline void send_sync(uint8_t what) {
@@ -256,7 +249,6 @@ void main()
 #endif
     dip_init();
     addr = read_addr();
-    recompute();
     uart_init();
     timer_init();
 
@@ -285,16 +277,14 @@ void main()
         update();
         update();
         update();
+
+        recompute_step();
+
         update();
         update();
         update();
         update();
 
-        if (need_recompute) {
-            need_recompute = 1;
-            recompute();
-            update();
-        }
 
     }
 }
