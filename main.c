@@ -6,6 +6,7 @@
 
 #define FOSC  24000000L //System frequency.
 #define BAUD  9600L    //UART1 baud-rate
+#define RX_INTERRUPT 0
 
 #define AUXR_BRTR (1<<4)
 #define AUXR_BRTx12 (1<<2)
@@ -77,7 +78,9 @@ void uart_init()
     PCON |= PCON_SMOD0; // enable frame error bit access
 
     REN = 1;
+#if RX_INTERRUPT
     ES = 1;
+#endif
 }
 
 void timer_init() {
@@ -153,19 +156,21 @@ static inline void send_sync(uint8_t what) {
     SBUF = what;
     while (TI == 0); 
     TI = 0; 
+#if RX_INTERRUPT
     ES = 1; 
+#else
+#endif
 }
 
-void  UART_Interrupt_Receive (void) __interrupt(SI0_VECTOR) __using(1)
-{
+static inline void check_uart() {
     if (RI == 1) {
             RI=0;
             uint8_t tmp = SBUF;
             update();
 
             if (SM0) { // framing error
-                TI=0;
-                SBUF = 222;
+                //TI=0;
+                //SBUF = 222;
                 SM0 = 0;
                 msgidx = 255;
             }
@@ -182,8 +187,8 @@ void  UART_Interrupt_Receive (void) __interrupt(SI0_VECTOR) __using(1)
                 update();
             } else if (tmp == 250) {
                 addr = read_addr();
-                TI = 0;
-                SBUF = addr;
+                //TI = 0;
+                //SBUF = addr;
             } else if (msgidx == MSG_LEN) {
                 //send_sync(221);
                 update();
@@ -224,6 +229,13 @@ void  UART_Interrupt_Receive (void) __interrupt(SI0_VECTOR) __using(1)
     }
 }
 
+#if RX_INTERRUPT
+void  UART_Interrupt_Receive (void) __interrupt(SI0_VECTOR) __using(1)
+{
+    check_uart();
+}
+#endif
+
 void main()
 {
     P3M0 = 0b1011100; //set P3.6, P3.4, P3.3 and P3.2 to strong push pull output
@@ -232,16 +244,18 @@ void main()
     EX1 = 0;
     ET0 = 0;
     EX0 = 0;
-    EA  =  1; //disable interrupts
+#if RX_INTERRUPT
+    EA  =  1;
+#endif
     dip_init();
     addr = read_addr();
     recompute();
     uart_init();
     timer_init();
 
-    TI = 0;
-    SBUF = 'R';
-    while (TI);
+    //TI = 0;
+    //SBUF = 'R';
+    //while (TI);
 
 
     while (1) {
@@ -256,8 +270,9 @@ void main()
         update();
 
 
-        if (RI==1) {
-        }
+#if !RX_INTERRUPT
+        check_uart();
+#endif
 
         update();
         update();
