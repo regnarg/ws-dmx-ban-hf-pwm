@@ -28,6 +28,8 @@ uint8_t msgidx = 255;
 uint8_t csum = 0;
 uint8_t last_csum = 255;
 
+uint8_t need_recompute = 0;
+
 
 #define STEP (TL1 & (LEVELS-1))
 // rotate is faster than shift because the cpu has rotate instructions, shift must be emulated
@@ -146,7 +148,13 @@ void recompute() {
         val |= (i < level0);
         pwm[i] = val;
         update();
-        //UPDATE(); //do not forget to update output during recomputation
+        
+#if !RX_INTERRUPT
+        if (RI) {
+            need_recompute = 1;
+            return;
+        }
+#endif
     }
 }
 
@@ -199,8 +207,7 @@ static inline void check_uart() {
                     level2  = msg[3];
                     level3  = msg[4];
                     update();
-                    recompute();
-                    update();
+                    need_recompute = 1;
                     last_csum = csum;
                     //send_sync(222);
                 } else {
@@ -282,6 +289,12 @@ void main()
         update();
         update();
         update();
+
+        if (need_recompute) {
+            need_recompute = 1;
+            recompute();
+            update();
+        }
 
     }
 }
