@@ -22,12 +22,7 @@ reliable 32 kHz PWM output with 64 brightness steps:
 
 ## Status
 
-  * PWM generation seems complete and stable.
-  * We need to implement a communication protocol. I currently prefer some
-    simplified variation on Modbus that is interoperable with other Modbus
-    devices on the same RS485 bus. Implementing DMX should be also feasible.
-    Currently there is a trivial protocol that allows you to set uniform brightness
-    on all channels by sending a digit 0 to 9 over the serial line (9600 8N1).
+Currently works usably using a custom communication protocol. DMX is not implemented.
 
 ## Supported devices
 
@@ -73,9 +68,28 @@ over the UART that you used for programming.
 When satisfied, you can disconnect the programming UART, put back the RS485
 receiver chip and you should be able to send the same commands over RS485.
 
-## Simple protocol
+## Communication protocol
 
+Communication protocol is unidirectional, there is no message confirmation (the DMX module
+only has RS485 receiver, no transmitter, so it cannot send anything). It consists of messages,
+each 7 bytes in length. It consists of:
 
+  * The message-start byte (253).
+  * Target device address (251 = broadcast), as set by the DIP switches (DIP switch
+    labelled "1" is LSB).
+  * Four bytes giving brightness levels for the four channels. Range is 0 to 64 inclusive.
+  * A random padding byte.
+  * A checksum byte, computed using simple combinations of XORs and bit rotations.
+    See source for exact algorithm.
+
+Recommended approach is that the control application on the RS485 master node keeps track
+of desired settings for each address and just transmits them continually in a loop. This
+way, if some message gets lost (there is no message confirmation) or a device is power cycled,
+it gets the desired configuration as soon as possible.
+
+See `ws_ban_lib.py` for example implementation of the master.
+
+The serial configuration is 9600 8N1.
 
 ## Technical details
 
